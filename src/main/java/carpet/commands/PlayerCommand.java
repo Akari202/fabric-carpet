@@ -96,7 +96,7 @@ public class PlayerCommand
                                 .then(literal("backward").executes(c -> manipulate(c, ap -> ap.setForward(-1))))
                                 .then(literal("left").executes(c -> manipulate(c, ap -> ap.setStrafing(1))))
                                 .then(literal("right").executes(c -> manipulate(c, ap -> ap.setStrafing(-1))))
-                        ).then(literal("spawn").executes(PlayerCommand::spawn)
+                        ).then(literal("spawn").requires((player) -> SettingsManager.canUseCommand(player, CarpetSettings.allowSpawningPlayers)).executes(PlayerCommand::spawn)
                                 .then(literal("in").requires((player) -> player.hasPermission(2))
                                         .then(argument("gamemode", StringArgumentType.word())
                                                 .suggests( (c, b) -> suggest(gamemodeStrings, b))

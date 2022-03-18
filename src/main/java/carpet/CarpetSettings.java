@@ -547,6 +547,9 @@ public class CarpetSettings
     @Rule(desc = "Spawn offline players in online mode if online-mode player with specified name does not exist", category = COMMAND)
     public static boolean allowSpawningOfflinePlayers = true;
 
+    @Rule(desc = "Disables spawning players with /player", category = COMMAND)
+    public static String allowSpawningPlayers = "ops";
+
     @Rule(desc = "Allows to track mobs AI via /track command", category = COMMAND)
     public static String commandTrackAI = "ops";
 

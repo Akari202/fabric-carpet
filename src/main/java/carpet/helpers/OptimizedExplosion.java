@@ -6,6 +6,8 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -27,8 +29,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.storage.loot.LootContext;
+import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -203,10 +204,10 @@ public class OptimizedExplosion
 
         // If it is needed, calls scarpet event
         if (EXPLOSION_OUTCOME.isNeeded() && !world.isClientSide()) {
-            EXPLOSION_OUTCOME.onExplosion((ServerLevel) world, eAccess.getSource(), e::getSourceMob,  eAccess.getX(), eAccess.getY(), eAccess.getZ(), eAccess.getRadius(), eAccess.isFire(), e.getToBlow(), entityList, eAccess.getBlockInteraction());
+            EXPLOSION_OUTCOME.onExplosion((ServerLevel) world, eAccess.getSource(), e::getIndirectSourceEntity,  eAccess.getX(), eAccess.getY(), eAccess.getZ(), eAccess.getRadius(), eAccess.isFire(), e.getToBlow(), entityList, eAccess.getBlockInteraction());
         }
 
-        boolean damagesTerrain = eAccess.getBlockInteraction() != Explosion.BlockInteraction.NONE;
+        boolean damagesTerrain = eAccess.getBlockInteraction() != Explosion.BlockInteraction.KEEP;
 
         // explosionSound incremented till disabling the explosion particles and sound
         if (explosionSound < 100 || explosionSound % 100 == 0)
@@ -230,28 +231,31 @@ public class OptimizedExplosion
         if (damagesTerrain)
         {
             ObjectArrayList<Pair<ItemStack, BlockPos>> objectArrayList = new ObjectArrayList<>();
-            Collections.shuffle(e.getToBlow(), world.random);
+            Util.shuffle((ObjectArrayList<BlockPos>) e.getToBlow(), world.random);
+
+            boolean dropFromExplosions = CarpetSettings.xpFromExplosions || e.getIndirectSourceEntity() instanceof Player;
 
             for (BlockPos blockpos : e.getToBlow())
             {
                 BlockState state = world.getBlockState(blockpos);
                 Block block = state.getBlock();
 
-                if (state.getMaterial() != Material.AIR)
+                if (!state.isAir())
                 {
-                    if (block.dropFromExplosion(e) && world instanceof ServerLevel)
+                    if (block.dropFromExplosion(e) && world instanceof ServerLevel serverLevel)
                     {
                         BlockEntity blockEntity = state.hasBlockEntity() ? world.getBlockEntity(blockpos) : null;  //hasBlockEntity()
 
-                        LootContext.Builder lootBuilder = (new LootContext.Builder((ServerLevel)eAccess.getLevel()))
-                                .withRandom(eAccess.getLevel().random)
+                        LootParams.Builder lootBuilder = (new LootParams.Builder((ServerLevel)eAccess.getLevel()))
                                 .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockpos))
                                 .withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
                                 .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity)
                                 .withOptionalParameter(LootContextParams.THIS_ENTITY, eAccess.getSource());
 
-                        if (eAccess.getBlockInteraction() == Explosion.BlockInteraction.DESTROY)
+                        if (eAccess.getBlockInteraction() == Explosion.BlockInteraction.DESTROY_WITH_DECAY)
                             lootBuilder.withParameter(LootContextParams.EXPLOSION_RADIUS, eAccess.getRadius());
+
+                        state.spawnAfterBreak(serverLevel, blockpos, ItemStack.EMPTY, dropFromExplosions);
 
                         state.getDrops(lootBuilder).forEach((itemStackx) -> {
                             method_24023(objectArrayList, itemStackx, blockpos.immutable());
@@ -275,7 +279,7 @@ public class OptimizedExplosion
 
                 BlockPos down = blockpos1.below(1);
                 if (eAccess.getRandom().nextInt(3) == 0 &&
-                        chunk.getBlockState(blockpos1).getMaterial() == Material.AIR &&
+                        chunk.getBlockState(blockpos1).isAir() &&
                         chunk.getBlockState(down).isSolidRender(world, down)
                         )
                 {
@@ -336,11 +340,11 @@ public class OptimizedExplosion
                         double d8 = eAccess.getZ();
 
                         for (float f1 = 0.3F; f > 0.0F; f -= 0.22500001F) {
-                            BlockPos blockpos = new BlockPos(d4, d6, d8);
+                            BlockPos blockpos = BlockPos.containing(d4, d6, d8);
                             BlockState state = eAccess.getLevel().getBlockState(blockpos);
                             FluidState fluidState = eAccess.getLevel().getFluidState(blockpos);
 
-                            if (state.getMaterial() != Material.AIR) {
+                            if (!state.isAir()) {
                                 float f2 = Math.max(state.getBlock().getExplosionResistance(), fluidState.getExplosionResistance());
                                 if (eAccess.getSource() != null)
                                     f2 = eAccess.getSource().getBlockExplosionResistance(e, eAccess.getLevel(), blockpos, state, fluidState, f2);
@@ -469,7 +473,7 @@ public class OptimizedExplosion
                 fluidCache.put(posImmutable, fluid);
             }
 
-            if (state.getMaterial() != Material.AIR)
+            if (!state.isAir())
             {
                 float resistance = Math.max(state.getBlock().getExplosionResistance(), fluid.getExplosionResistance());
 
@@ -528,11 +532,11 @@ public class OptimizedExplosion
                         boolean found = false;
 
                         for (float f1 = 0.3F; f > 0.0F; f -= 0.22500001F) {
-                            BlockPos blockpos = new BlockPos(d4, d6, d8);
+                            BlockPos blockpos = BlockPos.containing(d4, d6, d8);
                             BlockState state = eAccess.getLevel().getBlockState(blockpos);
                             FluidState fluidState = eAccess.getLevel().getFluidState(blockpos);
 
-                            if (state.getMaterial() != Material.AIR) {
+                            if (!state.isAir()) {
                                 float f2 = Math.max(state.getBlock().getExplosionResistance(), fluidState.getExplosionResistance());
                                 if (eAccess.getSource() != null)
                                     f2 = eAccess.getSource().getBlockExplosionResistance(e, eAccess.getLevel(), blockpos, state, fluidState, f2);

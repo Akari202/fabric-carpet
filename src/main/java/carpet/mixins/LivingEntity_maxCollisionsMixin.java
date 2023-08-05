@@ -1,7 +1,7 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
-import carpet.fakes.WorldInterface;
+import carpet.fakes.LevelInterface;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.EntityType;
@@ -38,8 +37,8 @@ public abstract class LivingEntity_maxCollisionsMixin extends Entity
         int maxEntityCramming =-1;
         if (CarpetSettings.maxEntityCollisions > 0)
         {
-            maxEntityCramming = this.level.getGameRules().getInt(GameRules.RULE_MAX_ENTITY_CRAMMING);
-            entities = ((WorldInterface) this.level).getOtherEntitiesLimited(
+            maxEntityCramming = this.level().getGameRules().getInt(GameRules.RULE_MAX_ENTITY_CRAMMING);
+            entities = ((LevelInterface) this.level()).getOtherEntitiesLimited(
                     this,
                     this.getBoundingBox(),
                     EntitySelector.pushableBy(this),
@@ -47,11 +46,11 @@ public abstract class LivingEntity_maxCollisionsMixin extends Entity
         }
         else
         {
-            entities = this.level.getEntities(this, this.getBoundingBox(), EntitySelector.pushableBy(this));
+            entities = this.level().getEntities(this, this.getBoundingBox(), EntitySelector.pushableBy(this));
         }
 
         if (!entities.isEmpty()) {
-            if (maxEntityCramming < 0) maxEntityCramming = this.level.getGameRules().getInt(GameRules.RULE_MAX_ENTITY_CRAMMING);
+            if (maxEntityCramming < 0) maxEntityCramming = this.level().getGameRules().getInt(GameRules.RULE_MAX_ENTITY_CRAMMING);
             if (maxEntityCramming > 0 && entities.size() > maxEntityCramming - 1 && this.random.nextInt(4) == 0) {
                 int candidates = 0;
 
@@ -62,7 +61,7 @@ public abstract class LivingEntity_maxCollisionsMixin extends Entity
                 }
 
                 if (candidates > maxEntityCramming - 1) {
-                    this.hurt(DamageSource.CRAMMING, 6.0F);
+                    this.hurt(damageSources().cramming(), 6.0F);
                 }
             }
             if (CarpetSettings.maxEntityCollisions > 0 && entities.size() > CarpetSettings.maxEntityCollisions)

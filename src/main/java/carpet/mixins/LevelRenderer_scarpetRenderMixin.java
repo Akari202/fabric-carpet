@@ -3,13 +3,15 @@ package carpet.mixins;
 import carpet.network.CarpetClient;
 import carpet.script.utils.ShapesRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Matrix4f;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderBuffers;
+import net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -19,9 +21,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class LevelRenderer_scarpetRenderMixin
 {
     @Inject(method = "<init>", at = @At("RETURN"))
-    private void addRenderers(Minecraft client, RenderBuffers bufferBuilders, CallbackInfo ci)
+    private void addRenderers(Minecraft minecraft, EntityRenderDispatcher entityRenderDispatcher, BlockEntityRenderDispatcher blockEntityRenderDispatcher, RenderBuffers renderBuffers, CallbackInfo ci)
     {
-        CarpetClient.shapes = new ShapesRenderer(client);
+        CarpetClient.shapes = new ShapesRenderer(minecraft);
     }
 
     @Inject(method = "renderLevel", at =  @At(

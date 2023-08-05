@@ -1,14 +1,18 @@
 package carpet.mixins;
 
 import carpet.fakes.MinecraftServerInterface;
-import carpet.helpers.TickSpeed;
+import carpet.script.CarpetScriptServer;
 import net.minecraft.Util;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerFunctionManager;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.util.thread.ReentrantBlockableEventLoop;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -27,6 +31,8 @@ import static carpet.script.CarpetEventServer.Event.TICK;
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEventLoop<TickTask> implements MinecraftServerInterface
 {
+    private CarpetScriptServer scriptServer;
+
     public MinecraftServer_scarpetMixin(String string_1)
     {
         super(string_1);
@@ -46,6 +52,16 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
 
     //@Shadow private ServerResources resources;
 
+    @Shadow private MinecraftServer.ReloadableResources resources;
+
+    @Shadow public abstract RegistryAccess.Frozen registryAccess();
+
+    @Shadow public abstract PlayerList getPlayerList();
+
+    @Shadow @Final private ServerFunctionManager functionManager;
+
+    @Shadow @Final private StructureTemplateManager structureTemplateManager;
+
     @Override
     public void forceTick(BooleanSupplier isAhead)
     {
@@ -60,11 +76,6 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
         return storageSource;
     }
 
-    //@Override
-    //public ServerResources getResourceManager() {
-    //    return resources;
-    //}
-
     @Override
     public Map<ResourceKey<Level>, ServerLevel> getCMWorlds()
     {
@@ -77,12 +88,40 @@ public abstract class MinecraftServer_scarpetMixin extends ReentrantBlockableEve
     ))
     public void tickTasks(BooleanSupplier booleanSupplier_1, CallbackInfo ci)
     {
-        if (!TickSpeed.process_entities)
+        if (!getTickRateManager().runsNormally())
+        {
             return;
-        TICK.onTick();
-        NETHER_TICK.onTick();
-        ENDER_TICK.onTick();
+        }
+        TICK.onTick((MinecraftServer) (Object) this);
+        NETHER_TICK.onTick((MinecraftServer) (Object) this);
+        ENDER_TICK.onTick((MinecraftServer) (Object) this);
     }
 
+    @Override
+    public void reloadAfterReload(RegistryAccess newRegs)
+    {
+        resources.managers().updateRegistryTags(newRegs);
+        getPlayerList().saveAll();
+        getPlayerList().reloadResources();
+        functionManager.replaceLibrary(this.resources.managers().getFunctionLibrary());
+        structureTemplateManager.onResourceManagerReload(this.resources.resourceManager());
+    }
 
+    @Override
+    public MinecraftServer.ReloadableResources getResourceManager()
+    {
+        return resources;
+    }
+
+    @Override
+    public void addScriptServer(final CarpetScriptServer scriptServer)
+    {
+        this.scriptServer = scriptServer;
+    }
+
+    @Override
+    public CarpetScriptServer getScriptServer()
+    {
+        return scriptServer;
+    }
 }

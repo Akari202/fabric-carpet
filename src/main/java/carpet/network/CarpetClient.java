@@ -7,12 +7,32 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 public class CarpetClient
 {
-    public static final Object sync = new Object();
+    public record CarpetPayload(CompoundTag data) implements CustomPacketPayload
+    {
+        public static final ResourceLocation ID = CARPET_CHANNEL;
+
+        public CarpetPayload(final FriendlyByteBuf input) {
+            this(input.readNbt());
+        }
+
+        @Override
+        public void write(final FriendlyByteBuf output) {
+            output.writeNbt(data);
+        }
+
+        @Override
+        public ResourceLocation id() {
+            return ID;
+        }
+    }
+
     public static final int HI = 69;
     public static final int HELLO = 420;
     public static final int DATA = 1;
@@ -21,18 +41,11 @@ public class CarpetClient
     private static LocalPlayer clientPlayer = null;
     private static boolean isServerCarpet = false;
     public static String serverCarpetVersion;
-    public static final ResourceLocation CARPET_CHANNEL = new ResourceLocation("carpet:hello");
+    public static final ResourceLocation CARPET_CHANNEL = new ResourceLocation("carpet", "hello");
 
     public static void gameJoined(LocalPlayer player)
     {
-        synchronized (sync)
-        {
-            clientPlayer = player;
-            // client didn't say hi back yet
-            if (isServerCarpet)
-                ClientNetworkHandler.respondHello();
-
-        }
+        clientPlayer = player;
     }
 
     public static void disconnect()

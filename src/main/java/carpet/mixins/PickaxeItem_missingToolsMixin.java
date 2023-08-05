@@ -1,15 +1,14 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
-import net.minecraft.tags.Tag;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.PickaxeItem;
 import net.minecraft.world.item.Tier;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.Material;
 import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(PickaxeItem.class)
@@ -22,9 +21,10 @@ public class PickaxeItem_missingToolsMixin extends DiggerItem
 
     @Override
     public float getDestroySpeed(ItemStack stack, BlockState state) {
-        Material material = state.getMaterial();
-        if (CarpetSettings.missingTools && material == Material.GLASS)
-             return speed;
+        if (CarpetSettings.missingTools && state.getBlock().getSoundType(state) == SoundType.GLASS)
+        {
+            return speed;
+        }
         return super.getDestroySpeed(stack, state);
     }
 }

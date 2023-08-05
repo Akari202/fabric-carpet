@@ -230,10 +230,14 @@ that block, a block doesn't get destroyed either.
 
 ### `create_explosion(pos, power?, mode?, fire?, source?, attacker?)`
 
-Creates an explosion at a given position. Default values of optional parameters are: `'power'` - `4` (TNT power), 
-`'mode'` (block breaking effect `none`, `destroy` or `break`: `break`, `fire` (whether extra fire blocks should be created) - `false`,
-`source` (exploding entity) - `null` and `attacker` (entity responsible for trigerring) - `null`. Explosions created with this
-endpoint cannot be captured with `__on_explosion` event, however they will be captured by `__on_explosion_outcome`.
+Creates an explosion at a given position. Parameters work as follows:
+ - `'power'` - how strong the blast is, negative values count as 0 (default: `4` (TNT power))
+ - `'mode'` - how to deal with broken blocks: `keep` keeps them, `destroy` destroys them and drops items, and `destroy_with_decay` destroys them, but doesn't always drop the items (default: `destroy_with_decay`)
+ - `fire` - whether extra fire blocks should be created (default: `false`)
+ - `source` - entity that is exploding. Note that it will not take explosion damage from this explosion (default: `null`)
+ - `attacker` - entity responsible for triggering, this will be displayed in death messages, and count towards kill counts, and can be damaged by the explosion (default: `null`)
+Explosions created with this endpoint cannot be captured with `__on_explosion` event, however they will be captured
+by `__on_explosion_outcome`.
 
 ### `weather()`,`weather(type)`,`weather(type, ticks)`
 
@@ -241,9 +245,10 @@ If called with no args, returns `'clear'`, `'rain` or `'thunder'` based on the c
 always return `'thunder'`, if not will return `'rain'` or `'clear'` based on the current weather.
 
 With one arg, (either `'clear'`, `'rain` or `'thunder'`), returns the number of remaining ticks for that weather type.
-NB: It can thunder without there being a thunderstorm, there has to be both rain and thunder to form a storm.
+NB: It can thunder without there being a thunderstorm; there has to be both rain and thunder to form a storm. So if
+running `weather()` returns `'thunder'`, you can use `weather('rain')>0` to see if there's a storm going on.
 
-With two args, sets the weather to `type` for `ticks` ticks.
+With two args, sets the weather to the given `type` for `ticks` ticks.
 
 ## Block and World querying
 
@@ -292,6 +297,7 @@ back in state definition in various applications where block properties are requ
 Throws `unknown_block` if the provided input is not valid.
 
 <pre>
+set(x,y,z,'iron_block'); block_state(x,y,z)  => {}
 set(x,y,z,'iron_trapdoor','half','top'); block_state(x,y,z)  => {waterlogged: false, half: top, open: false, ...}
 set(x,y,z,'iron_trapdoor','half','top'); block_state(x,y,z,'half')  => top
 block_state('iron_trapdoor','half')  => top
@@ -303,7 +309,14 @@ bool(block_state(block('iron_trapdoor[half=top]'),'powered'))  => 0
 
 ### `block_list()`, `block_list(tag)`
 
-Returns list of all blocks. If tag is provided, returns list of blocks that belong to this block tag.
+Returns list of all blocks in the game. If `tag` is provided, returns list of all blocks that belong to this block tag.
+<pre>
+block_list() => [dark_oak_button, wall_torch, structure_block, polished_blackstone_brick_slab, cherry_sapling... ]
+block_list('impermeable') => [glass, white_stained_glass, orange_stained_glass, magenta_stained_glass... ] //All da glass
+block_list('rails') => [rail, powered_rail, detector_rail, activator_rail]
+block_list('not_a_valid_block_tag') => null //Not a valid block tag
+</pre>
+
 
 ### `block_tags()`, `block_tags(block)`, `block_tags(block, tag)`
 
@@ -313,12 +326,21 @@ to this tag, and `true` if the block belongs to the tag.
 
 Throws `unknown_block` if `block` doesn't exist
 
+<pre>
+block_tags() => [geode_invalid_blocks, wall_post_override, ice, wooden_stairs, bamboo_blocks, stone_bricks... ]
+block_tags('iron_block') => [mineable/pickaxe, needs_stone_tool, beacon_base_blocks]
+block_tags('glass') => [impermeable]
+block_tags('glass', 'impermeable') => true
+block_tags('glass', 'beacon_base_blocks') => false
+</pre>
+
 ### `block_data(pos)`
 
 Return NBT string associated with specific location, or null if the block does not carry block data. Can be currently 
 used to match specific information from it, or use it to copy to another block
 
-<pre>    block_data(x,y,z) => '{TransferCooldown:0,x:450,y:68, ... }'
+<pre>
+block_data(x,y,z) => '{TransferCooldown:0,x:450,y:68, ... }'
 </pre>
 
 ### `poi(pos), poi(pos, radius?, type?, status?, column_search?)`
@@ -357,10 +379,11 @@ Note: Have to pass all 6 of the mentioned noise types and only these noise types
 With an optional feature, it returns value for the specified attribute for that biome. Available and queryable features include:
 * `'top_material'`: unlocalized block representing the top surface material (1.17.1 and below only)
 * `'under_material'`: unlocalized block representing what sits below topsoil (1.17.1 and below only)
-* `'category'`: the parent biome this biome is derived from. Possible values include:
+* `'category'`: the parent biome this biome is derived from. Possible values include (1.18.2 and below only):
 `'none'`, `'taiga'`, `'extreme_hills'`, `'jungle'`, `'mesa'`, `'plains'`, `'savanna'`,
 `'icy'`, `'the_end'`, `'beach'`, `'forest'`, `'ocean'`, `'desert'`, `'river'`,
 `'swamp'`, `'mushroom'` , `'nether'`, `'underground'` (1.18+) and `'mountain'` (1.18+).
+* `'tags'`: list of biome tags associated with this biome
 * `'temperature'`: temperature from 0 to 1
 * `'fog_color'`: RGBA color value of fog 
 * `'foliage_color'`: RGBA color value of foliage
@@ -418,6 +441,10 @@ Numeric function, returning the block light at position (from torches and other 
 ### `sky_light(pos)`
 
 Numeric function, returning the sky light at position (from sky access).
+
+### `effective_light(pos)`
+
+Numeric function, returning the "real" light at position, which is affected by time and weather. which also affects mobs spawning, frosted ice blocks melting.
 
 ### `see_sky(pos)`
 
@@ -481,15 +508,10 @@ Returns the name of sound type made by the block at position. One of:
 `'candle'`', `'amethyst'`', `'amethyst_cluster'`', `'small_amethyst_bud'`', `'large_amethyst_bud'`', `'medium_amethyst_bud'`',
 `'tuff'`', `'calcite'`', `'copper'`'
 
-### `material(pos)`
+### `(Deprecated) material(pos)`
 
-Returns the name of material of the block at position. very useful to target a group of blocks. One of:
-
-`'air'`, `'void'`, `'portal'`, `'carpet'`, `'plant'`, `'water_plant'`, `'vine'`, `'sea_grass'`, `'water'`, 
-`'bubble_column'`, `'lava'`, `'snow_layer'`, `'fire'`, `'redstone_bits'`, `'cobweb'`, `'redstone_lamp'`, `'clay'`, 
-`'dirt'`, `'grass'`, `'packed_ice'`, `'sand'`, `'sponge'`, `'wood'`, `'wool'`, `'tnt'`, `'leaves'`, `'glass'`, 
-`'ice'`, `'cactus'`, `'stone'`, `'iron'`, `'snow'`, `'anvil'`, `'barrier'`, `'piston'`, `'coral'`, `'gourd'`, 
-`'dragon_egg'`, `'cake'`, `'amethyst'`
+Returns `'unknown'`. The concept of material for blocks is removed. On previous versions it returned the name of the material the block
+was made of.
 
 ### `map_colour(pos)`
 
@@ -497,37 +519,35 @@ Returns the map colour of a block at position. One of:
 
 `'air'`, `'grass'`, `'sand'`, `'wool'`, `'tnt'`, `'ice'`, `'iron'`, `'foliage'`, `'snow'`, `'clay'`, `'dirt'`, 
 `'stone'`, `'water'`, `'wood'`, `'quartz'`, `'adobe'`, `'magenta'`, `'light_blue'`, `'yellow'`, `'lime'`, `'pink'`, 
-`'gray'`, `'light_gray'`, `'cyan'`, `'purple'`, `'blue'`, `'brown'`, `'green'`, `'red'`, `'black'`, `'gold
-'`, `'diamond'`, `'lapis'`, `'emerald'`, `'obsidian'`, `'netherrack'`, `'white_terracotta'`, `'orange_terracotta'`, 
+`'gray'`, `'light_gray'`, `'cyan'`, `'purple'`, `'blue'`, `'brown'`, `'green'`, `'red'`, `'black'`, `'gold'`, 
+`'diamond'`, `'lapis'`, `'emerald'`, `'obsidian'`, `'netherrack'`, `'white_terracotta'`, `'orange_terracotta'`, 
 `'magenta_terracotta'`, `'light_blue_terracotta'`, `'yellow_terracotta'`, `'lime_terracotta'`, `'pink_terracotta'`, 
 `'gray_terracotta'`, `'light_gray_terracotta'`, `'cyan_terracotta'`, `'purple_terracotta'`, `'blue_terracotta'`, 
 `'brown_terracotta'`, `'green_terracotta'`, `'red_terracotta'`, `'black_terracotta'`,
 `'crimson_nylium'`, `'crimson_stem'`, `'crimson_hyphae'`, `'warped_nylium'`, `'warped_stem'`, `'warped_hyphae'`, `'warped_wart'`
 
-### `sample_noise(pos, ...type?)` 1.18+ only
+### `sample_noise()`, `sample_noise(pos, ... types?)` 1.18+
 
- Samples the multi noise value(s) on the given position.  
-If no type is passed, returns a map of `continentalness`, `depth`, `erosion`, `humidity`, `temperature`, `weirdness`.  
-Otherwise, returns the map of that specific noise.
+Samples the world generation noise values / data driven density function(s) at a given position.
+
+If no types are passed in, or no arguments are given, it returns a list of all the available registry defined density functions.
+
+With a single function name passed in, it returns a scalar. With multiple function names passed in, it returns a list of results.
+
+Function accepts any registry defined density functions, both built in, as well as namespaced defined in datapacks. 
+On top of that, scarpet provides the following list of noises sampled directly from the current level (and not returned with no-argument call):
+
+
+`'barrier_noise'`, `'fluid_level_floodedness_noise'`, `'fluid_level_spread_noise'`, `'lava_noise'`,
+`'temperature'`, `'vegetation'`, `'continents'`, `'erosion'`, `'depth'`, `'ridges'`, 
+`'initial_density_without_jaggedness'`, `'final_density'`, `'vein_toggle'`, `'vein_ridged'` and `'vein_gap'`
 
 <pre>
-// without type
-sample_noise(pos) => {continentalness: 0.445300012827, erosion: 0.395399987698, temperature: 0.165399998426, ...}
+// requesting single value
+sample_density(pos, 'continents') => 0.211626790923
 // passing type as multiple arguments
-sample_noise(pos, 'pillarRareness', 'aquiferBarrier') => {aquiferBarrier: -0.205013844481, pillarRareness: 1.04772473438}
-// passing types as a list with unpacking operator
-sample_noise(pos, ...['spaghetti3dFirst', 'spaghetti3dSecond']) => {spaghetti3dFirst: -0.186052125186, spaghetti3dSecond: 0.211626790923}
+sample_density(pos, 'continents', 'depth', 'overworld/caves/pillars', 'mydatapack:foo/my_function') => [-0.205013844481, 1.04772473438, 0.211626790923, 0.123]
 </pre>
-
-Available types:
-
-`aquiferBarrier`, `aquiferFluidLevelFloodedness`, `aquiferFluidLevelSpread`, `aquiferLava`, `caveCheese`,
-`caveEntrance`, `caveLayer`, `continentalness`, `depth`, `erosion`, `humidity`, `island`, `jagged`, `oreGap`,
-`pillar`, `pillarRareness`, `pillarThickness`, `shiftX`, `shiftY`, `shiftZ`, `spaghetti2d`, `spaghetti2dElevation`,
-`spaghetti2dModulator`, `spaghetti2dThickness`, `spaghetti3d`, `spaghetti3dFirst`, `spaghetti3dRarity`,
-`spaghetti3dSecond`, `spaghetti3dThickness`, `spaghettiRoughness`, `spaghettiRoughnessModulator`, `temperature`,
-`terrain`, `terrainFactor`, `terrainOffset`, `terrainPeaks`, `weirdness`
-
 
 ### `loaded(pos)`
 
@@ -617,9 +637,9 @@ with minecraft 1.16.1 and below or 1.16.2 and above since in 1.16.2 Mojang has a
 meaning that since 1.16.2 - they have official names that can be used by datapacks and scarpet. If you have most recent
 scarpet on 1.16.4, you can use `plop()` to get all available worldgen features including custom features and structures
 controlled by datapacks. It returns a map of lists in the following categories: 
-`'scarpet_custom'`, `'configured_features'`, `'structures'`, `'features'`, `'configured_structures'`
+`'scarpet_custom'`, `'configured_features'`, `'structures'`, `'features'`, `'structure_types'`
 
-### Previous Structure Names, including variants (MC1.16.1 and below)
+### Previous Structure Names, including variants (for MC1.16.1 and below only)
 *   `'monument'`: Ocean Monument. Generates at fixed Y coordinate, surrounds itself with water.
 *   `'fortress'`: Nether Fortress. Altitude varies, but its bounded by the code.
 *   `'mansion'`: Woodland Mansion
@@ -713,28 +733,10 @@ controlled by datapacks. It returns a map of lists in the following categories:
 *   `'twisting_vines'` (1.16)
 *   `'basalt_pillar'` (1.16)
 
-### Standard Structures (as of MC1.16.2+)
 
-Use `plop():'structures'`, but it always returns the following:
+### World Generation Features and Structures (as of MC1.16.2+)
 
-`'bastion_remnant'`, `'buried_treasure'`, `'desert_pyramid'`, `'endcity'`, `'fortress'`, `'igloo'`, 
-`'jungle_pyramid'`, `'mansion'`, `'mineshaft'`, `'monument'`, `'nether_fossil'`, `'ocean_ruin'`, 
-`'pillager_outpost'`, `'ruined_portal'`, `'shipwreck'`, `'stronghold'`, `'swamp_hut'`, `'village'`
-
-### Structure Variants (as of MC1.16.2+)
-
-Use `plop():'configured_structures'`, but it always returns the following:
-
-`'bastion_remnant'`, `'buried_treasure'`, `'desert_pyramid'`, `'end_city'`, `'fortress'`, `'igloo'`, 
-`'jungle_pyramid'`, `'mansion'`, `'mineshaft'`, `'mineshaft_mesa'`, `'monument'`, `'nether_fossil'`,
-`'ocean_ruin_cold'`, `'ocean_ruin_warm'`, `'pillager_outpost'`, `'ruined_portal'`, `'ruined_portal_desert'`, 
-`'ruined_portal_jungle'`, `'ruined_portal_mountain'`, `'ruined_portal_nether'`, `'ruined_portal_ocean'`, 
-`'ruined_portal_swamp'`, `'shipwreck'`, `'shipwreck_beached'`, `'stronghold'`, `'swamp_hut'`, 
-`'village_desert'`, `'village_plains'`, `'village_savanna'`, `'village_snovy'`, `'village_taiga'`
-
-### World Generation Features (as of MC1.16.2+)
-
-Use `plop():'features'` and `plop():'configured_features'` for a list of available options. Your output may vary based on
+Use `plop():'structure_types'`, `plop():'structures'`, `plop():'features'`, and `plop():'configured_features'` for a list of available options. Your output may vary based on
 datapacks installed in your world.
 
 ### Custom Scarpet Features
@@ -753,12 +755,12 @@ These contain some popular features and structures that are impossible or diffic
 * `'coral_mushroom'` - mushroom coral feature
 * `'coral_tree'` - tree coral feature
 * `'fancy_oak_bees'` - large oak tree variant with a mandatory beehive unlike standard that generate with probability
-* `'oak_bees'` - normal oak tree with a manatory beehive unlike standard that generate with probability
+* `'oak_bees'` - normal oak tree with a mandatory beehive unlike standard that generate with probability
 
 
 ### `structure_eligibility(pos, ?structure, ?size_needed)`
 
-Checks wordgen eligibility for a structure in a given chunk. Requires a `Structure Variant` name (see above),
+Checks worldgen eligibility for a structure in a given chunk. Requires a `Structure Variant` name (see above),
 or `Standard Structure` to check structures of this type.
 If no structure is given, or `null`, then it will check
 for all structures. If bounding box of the structures is also requested, it will compute size of potential
@@ -817,7 +819,7 @@ Throws `unknown_structure` if structure doesn't exist.
 Plops a structure or a feature at a given `pos`, so block, triple position coordinates or a list of coordinates. 
 To `what` gets plopped and exactly where it often depends on the feature or structure itself. 
 
-Requires a `Structure Variant`,  `Standard Structure`, `World Generation Feature` or `Custom Scarpet Feature` name (see
+Requires a `Structure Type`,  `Structure`, `World Generation Feature` or `Custom Scarpet Feature` name (see
 above). If standard name is used, the variant of the structure may depend on the biome, otherwise the default 
 structure for this type will be generated.
 
@@ -833,27 +835,3 @@ which sets it without looking into world blocks, and then use `plop` to fill it 
 All generated structures will retain their properties, like mob spawning, however in many cases the world / dimension 
 itself has certain rules to spawn mobs, like plopping a nether fortress in the overworld will not spawn nether mobs, 
 because nether mobs can spawn only in the nether, but plopped in the nether - will behave like a valid nether fortress.
-
-###  (deprecated) `custom_dimension(name, seed?)`
-
-Deprecated by `create_datapack()` which can be used to setup custom dimensions
-
-Ensures the dimension with the given `'name'` is available and configured with the given seed. It merely sets the world
-generator settings to the overworld, and the optional custom seed (or using current world seed, if not provided). 
-
-If the dimension with this name already exists, returns `false` and does nothing.
-
-Created dimension with `custom_dimension` only exist till the game restart (same with the datapacks, if removed), but
-all the world data should be saved. If custom dimension is re-created next time the app is loaded it will be using
-the existing world content. This means that it is up to the programmer to make sure the custom dimensions settings
-are stored in app data and restored when app reloads and wants to use previous worlds. Since vanilla game only keeps
-track of world data, not the world settings, if the dimension hasn't been yet configured via `custom_dimension` and
-the app hasn't yet initalized their dimension, the players will be positioned in the overworld at the same coordinates.
-
-List of custom dimensions (to be used in the likes of `/execute in <dim>`) is only send to the clients when joining the 
-game, meaning custom worlds created after a player has joined will not be suggested in vanilla commands, but running
-vanilla commands on them will be successful. Its due to the fact that datapacks with dimensions are always loaded
-with the game and assumed not changing.
-
-`custom_dimension` is experimental and considered a WIP. More customization options besides the seed will be added in
-the future.

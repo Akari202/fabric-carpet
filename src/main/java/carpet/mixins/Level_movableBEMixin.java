@@ -1,9 +1,9 @@
 package carpet.mixins;
 
 import carpet.fakes.WorldChunkInterface;
-import carpet.fakes.WorldInterface;
+import carpet.fakes.LevelInterface;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 @Mixin(Level.class)
-public abstract class Level_movableBEMixin implements WorldInterface, LevelAccessor
+public abstract class Level_movableBEMixin implements LevelInterface, LevelAccessor
 {
     @Shadow
     @Final
@@ -57,6 +57,7 @@ public abstract class Level_movableBEMixin implements WorldInterface, LevelAcces
     /**
      * @author 2No2Name
      */
+    @Override
     public boolean setBlockStateWithBlockEntity(BlockPos blockPos_1, BlockState blockState_1, BlockEntity newBlockEntity, int int_1)
     {
         if (isOutsideBuildHeight(blockPos_1) || !this.isClientSide && isDebug()) return false;
@@ -100,7 +101,7 @@ public abstract class Level_movableBEMixin implements WorldInterface, LevelAcces
                     this.setBlocksDirty(blockPos_1, blockState_2, blockState_3);
                 }
 
-                if ((int_1 & 2) != 0 && (!this.isClientSide || (int_1 & 4) == 0) && (this.isClientSide || worldChunk_1.getFullStatus() != null && worldChunk_1.getFullStatus().isOrAfter(ChunkHolder.FullChunkStatus.TICKING)))
+                if ((int_1 & 2) != 0 && (!this.isClientSide || (int_1 & 4) == 0) && (this.isClientSide || worldChunk_1.getFullStatus() != null && worldChunk_1.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING)))
                 {
                     this.sendBlockUpdated(blockPos_1, blockState_2, blockState_1, int_1);
                 }

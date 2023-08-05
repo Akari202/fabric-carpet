@@ -3,9 +3,11 @@ package carpet.network;
 import carpet.CarpetServer;
 import carpet.CarpetExtension;
 import carpet.CarpetSettings;
-import carpet.helpers.TickSpeed;
-import carpet.settings.ParsedRule;
-import carpet.settings.SettingsManager;
+import carpet.api.settings.CarpetRule;
+import carpet.api.settings.InvalidRuleValueException;
+import carpet.fakes.LevelInterface;
+import carpet.helpers.TickRateManager;
+import carpet.api.settings.SettingsManager;
 import io.netty.buffer.Unpooled;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +19,9 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
 public class ClientNetworkHandler
 {
@@ -42,8 +46,8 @@ public class ClientNetworkHandler
                     else
                     {
                         for (CarpetExtension extension: CarpetServer.extensions) {
-                            SettingsManager eManager = extension.customSettingsManager();
-                            if (eManager != null && managerName.equals(eManager.getIdentifier()))
+                            SettingsManager eManager = extension.extensionSettingsManager();
+                            if (eManager != null && managerName.equals(eManager.identifier()))
                             {
                                 manager = eManager;
                                 break;
@@ -56,23 +60,31 @@ public class ClientNetworkHandler
                     manager = CarpetServer.settingsManager;
                     ruleName = ruleKey;
                 }
-                ParsedRule<?> rule = (manager != null) ? manager.getRule(ruleName) : null;
+                CarpetRule<?> rule = (manager != null) ? manager.getCarpetRule(ruleName) : null;
                 if (rule != null)
                 {
                     String value = ruleNBT.getString("Value");
-                    try { rule.set(null, value); } catch (Exception ignored) { }
+                    try { rule.set(null, value); } catch (InvalidRuleValueException ignored) { }
                 }
             }
         });
-        dataHandlers.put("TickRate", (p, t) -> TickSpeed.tickrate(((NumericTag)t).getAsFloat(), false));
+        dataHandlers.put("TickRate", (p, t) -> {
+            TickRateManager tickRateManager = ((LevelInterface)p.clientLevel).tickRateManager();
+            tickRateManager.setTickRate(((NumericTag) t).getAsFloat());
+        });
         dataHandlers.put("TickingState", (p, t) -> {
             CompoundTag tickingState = (CompoundTag)t;
-            TickSpeed.setFrozenState(tickingState.getBoolean("is_paused"), tickingState.getBoolean("deepFreeze"));
+            TickRateManager tickRateManager = ((LevelInterface)p.clientLevel).tickRateManager();
+            tickRateManager.setFrozenState(tickingState.getBoolean("is_paused"), tickingState.getBoolean("deepFreeze"));
         });
         dataHandlers.put("SuperHotState", (p, t) -> {
-            TickSpeed.is_superHot = ((ByteTag) t).equals(ByteTag.ONE);
+            TickRateManager tickRateManager = ((LevelInterface)p.clientLevel).tickRateManager();
+            tickRateManager.setSuperHot(((ByteTag) t).equals(ByteTag.ONE));
         });
-        dataHandlers.put("TickPlayerActiveTimeout", (p, t) -> TickSpeed.player_active_timeout = ((NumericTag)t).getAsInt());
+        dataHandlers.put("TickPlayerActiveTimeout", (p, t) -> {
+            TickRateManager tickRateManager = ((LevelInterface)p.clientLevel).tickRateManager();
+            tickRateManager.setPlayerActiveTimeout(((NumericTag) t).getAsInt());
+        });
         dataHandlers.put("scShape", (p, t) -> { // deprecated // and unused // should remove for 1.17
             if (CarpetClient.shapes != null)
                 CarpetClient.shapes.addShape((CompoundTag)t);
@@ -86,6 +98,7 @@ public class ClientNetworkHandler
         });
     };
 
+    // Ran on the Main Minecraft Thread
     public static void handleData(FriendlyByteBuf data, LocalPlayer player)
     {
         if (data != null)
@@ -100,29 +113,38 @@ public class ClientNetworkHandler
 
     private static void onHi(FriendlyByteBuf data)
     {
-        synchronized (CarpetClient.sync)
+        CarpetClient.setCarpet();
+        CarpetClient.serverCarpetVersion = data.readUtf(64);
+        if (CarpetSettings.carpetVersion.equals(CarpetClient.serverCarpetVersion))
         {
-            CarpetClient.setCarpet();
-            CarpetClient.serverCarpetVersion = data.readUtf(64);
-            if (CarpetSettings.carpetVersion.equals(CarpetClient.serverCarpetVersion))
-            {
-                CarpetSettings.LOG.info("Joined carpet server with matching carpet version");
-            }
-            else
-            {
-                CarpetSettings.LOG.warn("Joined carpet server with another carpet version: "+CarpetClient.serverCarpetVersion);
-            }
-            if (CarpetClient.getPlayer() != null)
-                respondHello();
-
+            CarpetSettings.LOG.info("Joined carpet server with matching carpet version");
         }
+        else
+        {
+            CarpetSettings.LOG.warn("Joined carpet server with another carpet version: "+CarpetClient.serverCarpetVersion);
+        }
+        // We can ensure that this packet is
+        // processed AFTER the player has joined
+        respondHello();
     }
 
     public static void respondHello()
     {
         CarpetClient.getPlayer().connection.send(new ServerboundCustomPayloadPacket(
-                CarpetClient.CARPET_CHANNEL,
-                (new FriendlyByteBuf(Unpooled.buffer())).writeVarInt(CarpetClient.HELLO).writeUtf(CarpetSettings.carpetVersion)
+                new CustomPacketPayload()
+                {
+                    @Override
+                    public void write(final FriendlyByteBuf friendlyByteBuf)
+                    {
+                        friendlyByteBuf.writeVarInt(CarpetClient.HELLO).writeUtf(CarpetSettings.carpetVersion);
+                    }
+
+                    @Override
+                    public ResourceLocation id()
+                    {
+                        return CarpetClient.CARPET_CHANNEL;
+                    }
+                }
         ));
     }
 
@@ -154,8 +176,20 @@ public class ClientNetworkHandler
         CompoundTag outer = new CompoundTag();
         outer.put("clientCommand", tag);
         CarpetClient.getPlayer().connection.send(new ServerboundCustomPayloadPacket(
-                CarpetClient.CARPET_CHANNEL,
-                (new FriendlyByteBuf(Unpooled.buffer())).writeVarInt(CarpetClient.DATA).writeNbt(outer)
+                new CustomPacketPayload()
+                {
+                    @Override
+                    public void write( FriendlyByteBuf friendlyByteBuf)
+                    {
+                        friendlyByteBuf.writeVarInt(CarpetClient.DATA).writeNbt(outer);
+                    }
+
+                    @Override
+                    public ResourceLocation id()
+                    {
+                        return CarpetClient.CARPET_CHANNEL;
+                    }
+                }
         ));
     }
 }

@@ -2,8 +2,9 @@ package carpet.mixins;
 
 import carpet.network.CarpetClient;
 import carpet.network.ServerNetworkHandler;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.PacketUtils;
+import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
+import net.minecraft.network.protocol.game.ServerGamePacketListener;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -18,14 +19,5 @@ public class ServerGamePacketListenerImplMixin
 {
     @Shadow public ServerPlayer player;
 
-    @Inject(method = "handleCustomPayload", at = @At("HEAD"), cancellable = true)
-    private void onCustomCarpetPayload(ServerboundCustomPayloadPacket packet, CallbackInfo ci)
-    {
-        ResourceLocation channel = packet.getIdentifier();
-        if (CarpetClient.CARPET_CHANNEL.equals(channel))
-        {
-            ServerNetworkHandler.handleData(new FriendlyByteBuf(packet.getData().copy()), player);
-            ci.cancel();
-        }
-    }
+
 }

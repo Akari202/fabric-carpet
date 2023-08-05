@@ -1,8 +1,10 @@
 package carpet.mixins;
 
+import carpet.fakes.MinecraftServerInterface;
 import carpet.fakes.ThreadedAnvilChunkStorageInterface;
-import carpet.helpers.TickSpeed;
+import carpet.helpers.ServerTickRateManager;
 import carpet.utils.CarpetProfiler;
+import net.minecraft.server.level.DistanceManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,7 +27,7 @@ import com.google.common.collect.Lists;
 public abstract class ServerChunkCache_tickMixin
 {
 
-    @Shadow @Final private ServerLevel level;
+    @Shadow @Final ServerLevel level;
 
     @Shadow @Final
     public ChunkMap chunkMap;
@@ -35,7 +37,30 @@ public abstract class ServerChunkCache_tickMixin
     @Inject(method = "tickChunks", at = @At("HEAD"))
     private void startSpawningSection(CallbackInfo ci)
     {
-        currentSection = CarpetProfiler.start_section(level, "Spawning and Random Ticks", CarpetProfiler.TYPE.GENERAL);
+        currentSection = CarpetProfiler.start_section(level, "Spawning", CarpetProfiler.TYPE.GENERAL);
+    }
+
+    @Inject(method = "tickChunks", at = @At(
+            value = "FIELD",
+            target = "net/minecraft/server/level/ServerChunkCache.level:Lnet/minecraft/server/level/ServerLevel;",
+            ordinal = 10
+    ))
+    private void skipChunkTicking(CallbackInfo ci)
+    {
+        if (currentSection != null)
+        {
+            CarpetProfiler.end_current_section(currentSection);
+        }
+    }
+
+    @Inject(method = "tickChunks", at = @At(
+            value = "INVOKE",
+            target = "net/minecraft/server/level/ServerLevel.tickChunk(Lnet/minecraft/world/level/chunk/LevelChunk;I)V",
+            shift = At.Shift.AFTER
+    ))
+    private void resumeSpawningSection(CallbackInfo ci)
+    {
+        currentSection = CarpetProfiler.start_section(level, "Spawning", CarpetProfiler.TYPE.GENERAL);
     }
 
     @Inject(method = "tickChunks", at = @At("RETURN"))
@@ -55,7 +80,7 @@ public abstract class ServerChunkCache_tickMixin
     private boolean skipChunkTicking(ServerLevel serverWorld)
     {
         boolean debug = serverWorld.isDebug();
-        if (!TickSpeed.process_entities)
+        if (!((MinecraftServerInterface)serverWorld.getServer()).getTickRateManager().runsNormally())
         {
             // simplified chunk tick iteration assuming world is frozen otherwise as suggested by Hadron67
             // to be kept in sync with the original injection source
@@ -72,6 +97,19 @@ public abstract class ServerChunkCache_tickMixin
             return true;
         }
         return debug;
+    }
+
+    @Redirect(method = "tick", at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/server/level/DistanceManager;purgeStaleTickets()V"
+    ))
+    private void pauseTicketSystem(DistanceManager distanceManager)
+    {
+        // pausing expiry of tickets
+        // that will prevent also chunks from unloading, so require a deep frozen state
+        ServerTickRateManager trm = ((MinecraftServerInterface) level.getServer()).getTickRateManager();
+        if (!trm.runsNormally() && trm.deeplyFrozen()) return;
+        distanceManager.purgeStaleTickets();
     }
 
 }
